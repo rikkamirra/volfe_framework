@@ -6,11 +6,38 @@ class Base {
 
 class Controller extends Base {
   render() {
-
+    console.log("Compile");
+    console.log(this, this._view);
+    this.app.directives.compile(this._view);
   }
 
   leave() {
 
+  }
+}
+
+class Directives extends Base {
+  constructor(app) {
+    super(app);
+
+    this.directives = {
+      'volfe-go': (element, attrValue) => {
+        element.onclick = () => {
+          this.app.router.go(attrValue);
+        };
+      }
+    }
+  }
+
+  compile(parentSelector) {
+    for (var directiveName in this.directives) {
+      var elements = document.querySelectorAll(`${parentSelector || 'body'} [${directiveName}]`);
+      if (!elements) break;
+      for (var element of elements) {
+        var callback = this.directives[directiveName];
+        callback(element, element.getAttribute(directiveName));
+      }
+    }
   }
 }
 
@@ -70,7 +97,9 @@ class Router extends Base {
 
   runRoute(route) {
     if (route.templateUrl) {
-      this.app.html.load(route.templateUrl, route.view || this.defaultView).then(html => {
+      let view = route.view || this.defaultView;
+      this.app.html.load(route.templateUrl, view).then(html => {
+        route._view = view;
         this.runController(route);
       });
     } else {
@@ -79,11 +108,10 @@ class Router extends Base {
   }
 
   runController(route) {
-    if (route.controller) {
-      route._controller = new route.controller(this.app);
-      route._controller.render();
-      this.currentRoute = route._controller;
-    }
+    var controller = route.controller || Controller;
+    route._controller = new controller(this.app);
+    route._controller._view = route._view;
+    route._controller.render();
     this.routeChain.push(route);
     this.changeAddress(route._url);
   }
@@ -157,16 +185,6 @@ class Router extends Base {
   }
 }
 
-class HomeController extends Controller {
-  render() {
-    console.log("Hello from Home");
-  }
-
-  leave() {
-    console.log("Bye Home");
-  }
-}
-
 class App {
   constructor(routes) {
     this.routes = routes;
@@ -174,28 +192,9 @@ class App {
     this.html = new HtmlService(this);
     this.http = new HttpService(this);
     this.router = new Router(this);
+    this.directives = new Directives(this);
 
+    this.directives.compile('body');
     this.router.go(window.location.pathname);
   }
 }
-
-var routes = {
-  'home': {
-    url: '/home',
-    controller: HomeController,
-    templateUrl: "templates/home.html",
-    children: {
-      "articles": {
-        url: '/articles',
-        view: "#home_content",
-        templateUrl: "templates/articles.html"
-      }
-    }
-  },
-  'about': {
-    url: '/about',
-    templateUrl: "templates/about.html"
-  }
-}
-
-var app = new App(routes);
